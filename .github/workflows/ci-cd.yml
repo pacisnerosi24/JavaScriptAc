@@ -22,42 +22,37 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t my-calculator-app .
-          docker images  # Verifica que la imagen fue construida
 
-      # 4. Guardar la imagen y transferirla a EC2
+      # 4. Guardar la imagen Docker y transferirla a EC2 usando SCP
+      - name: Save SSH key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ec2_key.pem
+          chmod 600 /tmp/ec2_key.pem
+
       - name: Save and transfer Docker image to EC2
         run: |
+          # Guardar la imagen Docker y comprimirla
           docker save my-calculator-app | gzip > my-calculator-app.tar.gz
-          scp -i ${{ secrets.EC2_SSH_KEY }} my-calculator-app.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+          
+          # Transferir el archivo comprimido a EC2
+          scp -i /tmp/ec2_key.pem my-calculator-app.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
 
-      # 5. Cargar la imagen Docker en la instancia EC2
-      - name: Load Docker image on EC2
-        uses: appleboy/ssh-action@v0.1.6
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            gzip -d /tmp/my-calculator-app.tar.gz
-            sudo docker load < /tmp/my-calculator-app.tar
+      # 5. Limpiar la clave SSH después de la transferencia
+      - name: Clean up SSH key
+        run: |
+          rm /tmp/ec2_key.pem
 
-      # 6. Verificar que la imagen fue cargada en EC2
-      - name: Verify Docker image on EC2
-        uses: appleboy/ssh-action@v0.1.6
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: sudo docker images
-
-      # 7. Desplegar la aplicación en EC2
+      # 6. Desplegar la aplicación en EC2
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@v0.1.6
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            sudo docker stop my-calculator-app || true
-            sudo docker rm my-calculator-app || true
-            sudo docker run -d -p 80:80 --name my-calculator-app my-calculator-app
+        run: |
+          ssh -o StrictHostKeyChecking=no -i /tmp/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            # Detener y eliminar la aplicación anterior (si existe)
+            docker stop my-calculator-app || true
+            docker rm my-calculator-app || true
+
+            # Cargar la nueva imagen
+            docker load < /tmp/my-calculator-app.tar.gz
+
+            # Ejecutar la nueva imagen
+            docker run -d -p 80:80 --name my-calculator-app my-calculator-app
+          EOF
