@@ -44,12 +44,28 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ec2_key.pem
           chmod 600 /tmp/ec2_key.pem
           ssh -o StrictHostKeyChecking=no -i /tmp/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            # Instalar Docker si no está instalado
-            sudo yum update -y
-            sudo amazon-linux-extras install docker -y
-            sudo service docker start
-            sudo usermod -a -G docker $USER
-            newgrp docker
+            # Comprobar la distribución y usar el proceso de instalación de Docker adecuado
+            DISTRO=$(cat /etc/*release | grep -E 'Amazon Linux|Ubuntu|Debian' | head -n 1)
+
+            # Si es Amazon Linux 2 o Amazon Linux 2023
+            if [[ "$DISTRO" == *"Amazon Linux"* ]]; then
+              echo "Instalando Docker en Amazon Linux..."
+              sudo yum update -y
+              sudo yum install docker -y
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker ec2-user
+              newgrp docker
+            # Si es Ubuntu o Debian
+            elif [[ "$DISTRO" == *"Ubuntu"* || "$DISTRO" == *"Debian"* ]]; then
+              echo "Instalando Docker en Ubuntu/Debian..."
+              sudo apt-get update
+              sudo apt-get install docker.io -y
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $(whoami)
+              newgrp docker
+            fi
 
             # Detener y eliminar la aplicación anterior (si existe)
             docker stop my-calculator-app || true
