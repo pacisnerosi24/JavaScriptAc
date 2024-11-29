@@ -49,10 +49,10 @@ jobs:
             fi
             
             # Detener y eliminar contenedores anteriores
-            docker stop my-calculator-app || true
-            docker rm my-calculator-app || true
+            sudo docker stop my-calculator-app || true
+            sudo docker rm my-calculator-app || true
             
             # Ejecutar el contenedor
-            docker run -d -p 80:80 --name my-calculator-app my-calculator-app
+            sudo docker run -d -p 80:80 --name my-calculator-app my-calculator-app
           EOF
           rm -f private_key.pem  # Eliminar la clave privada después de usarla
