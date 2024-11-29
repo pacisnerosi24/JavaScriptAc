@@ -23,28 +23,15 @@ jobs:
         run: |
           docker build -t my-calculator-app .
 
-      # 4. Guardar la imagen Docker como archivo tar y transferirlo a EC2
-      - name: Save and Copy Docker image to EC2
-        run: |
-          # Guardar la imagen Docker como un archivo tar
-          docker save my-calculator-app -o my-calculator-app.tar
-
-          # Guardar la clave privada en un archivo temporal
-          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-
-          # Copiar el archivo TAR de la imagen Docker a EC2 usando SCP
-          scp -o StrictHostKeyChecking=no -i private_key.pem my-calculator-app.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }}:/home/${{ secrets.EC2_USER }}/
-
-          # Eliminar la clave privada después de usarla
-          rm -f private_key.pem
-
-      # 5. Instalar Docker en EC2 si no está instalado y cargar la imagen Docker
-      - name: Install Docker and Load Docker image on EC2
+      # 4. Copiar la imagen Docker a la instancia EC2 usando SSH
+      - name: Copy Docker image to EC2
         run: |
           # Guardar la clave privada en un archivo temporal
           echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
+          
+          # Verificar que la clave se haya guardado correctamente (opcional, puedes eliminar esto en producción)
+          # cat private_key.pem
 
           # Conectarse a la instancia EC2 e instalar Docker si es necesario
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
@@ -58,18 +45,17 @@ jobs:
               sudo usermod -aG docker $USER
               newgrp docker  # Aplicar cambios de grupo en la sesión actual
             fi
-
-            # Cargar la imagen Docker desde el archivo TAR
-            docker load < /home/${{ secrets.EC2_USER }}/my-calculator-app.tar
             # Detener y eliminar contenedores anteriores
             docker stop my-calculator-app || true
             docker rm my-calculator-app || true
+            # Cargar la imagen Docker
+            docker load < my-calculator-app.tar
           EOF
 
           # Eliminar la clave privada después de usarla
           rm -f private_key.pem
 
-      # 6. Desplegar la aplicación en EC2
+      # 5. Desplegar la aplicación en EC2
       - name: Deploy to EC2
         run: |
           # Guardar la clave privada en un archivo temporal
