@@ -33,22 +33,9 @@ jobs:
           # Verificar que la clave se haya guardado correctamente (opcional, puedes eliminar esto en producción)
           # cat private_key.pem
 
-          # Copiar la imagen Docker a EC2 y cargarla allí
-          docker save my-calculator-app | ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} 'docker load'
-
-          # Eliminar la clave privada después de usarla
-          rm -f private_key.pem
-
-      # 5. Instalar Docker (si es necesario) y desplegar la aplicación en EC2
-      - name: Deploy to EC2
-        run: |
-          # Guardar la clave privada en un archivo temporal
-          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
-          chmod 600 private_key.pem
-          
-          # Conectarse a EC2 para instalar Docker si es necesario
+          # Conectarse a la instancia EC2 e instalar Docker si es necesario
           ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-            # Instalar Docker si no está instalado
+            # Verificar si Docker está instalado
             if ! command -v docker &> /dev/null; then
               echo "Docker no está instalado. Instalando Docker..."
               sudo yum update -y
@@ -58,12 +45,25 @@ jobs:
               sudo usermod -aG docker $USER
               newgrp docker  # Aplicar cambios de grupo en la sesión actual
             fi
-            
             # Detener y eliminar contenedores anteriores
             docker stop my-calculator-app || true
             docker rm my-calculator-app || true
-            
-            # Ejecutar el contenedor
+            # Cargar la imagen Docker
+            docker load < my-calculator-app.tar
+          EOF
+
+          # Eliminar la clave privada después de usarla
+          rm -f private_key.pem
+
+      # 5. Desplegar la aplicación en EC2
+      - name: Deploy to EC2
+        run: |
+          # Guardar la clave privada en un archivo temporal
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+
+          # Ejecutar el contenedor en EC2
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
             docker run -d -p 80:80 --name my-calculator-app my-calculator-app
           EOF
 
