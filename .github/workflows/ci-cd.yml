@@ -22,19 +22,37 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t my-calculator-app .
-      
-      # 4. Copiar la imagen Docker a la instancia EC2 usando SSH y SCP
+
+      # 4. Copiar la imagen Docker a la instancia EC2 usando SSH
       - name: Copy Docker image to EC2
         run: |
           echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
           chmod 600 private_key.pem
           docker save my-calculator-app | ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} 'docker load'
+          rm -f private_key.pem  # Eliminar la clave privada después de usarla
 
-      # 5. Desplegar la aplicación en EC2
+      # 5. Instalar Docker (si es necesario) y desplegar la aplicación en EC2
       - name: Deploy to EC2
         run: |
-          ssh -o StrictHostKeyChecking=no -i ${{ secrets.EC2_PRIVATE_KEY }} ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+          echo "${{ secrets.EC2_PRIVATE_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            # Instalar Docker si no está instalado
+            if ! command -v docker &> /dev/null; then
+              echo "Docker no está instalado. Instalando Docker..."
+              sudo yum update -y
+              sudo yum install -y docker
+              sudo systemctl start docker
+              sudo systemctl enable docker
+              sudo usermod -aG docker $USER
+              newgrp docker  # Aplicar cambios de grupo en la sesión actual
+            fi
+            
+            # Detener y eliminar contenedores anteriores
             docker stop my-calculator-app || true
             docker rm my-calculator-app || true
+            
+            # Ejecutar el contenedor
             docker run -d -p 80:80 --name my-calculator-app my-calculator-app
           EOF
+          rm -f private_key.pem  # Eliminar la clave privada después de usarla
