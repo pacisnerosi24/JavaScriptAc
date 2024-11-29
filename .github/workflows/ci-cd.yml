@@ -22,26 +22,41 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t my-calculator-app .
+          docker images  # Verifica que la imagen fue construida
 
-      # 4. Copiar la imagen Docker a EC2 y cargarla usando SSH (appleboy/ssh-action)
-      - name: Copy Docker image to EC2 and load
+      # 4. Guardar la imagen y transferirla a EC2
+      - name: Save and transfer Docker image to EC2
+        run: |
+          docker save my-calculator-app | gzip > my-calculator-app.tar.gz
+          scp -i ${{ secrets.EC2_SSH_KEY }} my-calculator-app.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
+
+      # 5. Cargar la imagen Docker en la instancia EC2
+      - name: Load Docker image on EC2
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
           script: |
-            sudo docker save my-calculator-app | docker load
+            gzip -d /tmp/my-calculator-app.tar.gz
+            sudo docker load < /tmp/my-calculator-app.tar
 
-      # 5. Desplegar la aplicación en EC2 usando SSH (appleboy/ssh-action)
+      # 6. Verificar que la imagen fue cargada en EC2
+      - name: Verify Docker image on EC2
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: sudo docker images
+
+      # 7. Desplegar la aplicación en EC2
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
           script: |
             sudo docker stop my-calculator-app || true
             sudo docker rm my-calculator-app || true
