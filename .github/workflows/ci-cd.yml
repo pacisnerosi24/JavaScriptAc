@@ -38,44 +38,46 @@ jobs:
           chmod 600 /tmp/ec2_key.pem
           scp -i /tmp/ec2_key.pem my-calculator-app.tar.gz ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/
 
-      # 5. Desplegar la aplicación en EC2
-      - name: Deploy to EC2
+      # 5. Desplegar la aplicación en EC2 (solo para Amazon Linux 2023)
+      - name: Deploy to EC2 (Amazon Linux 2023)
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > /tmp/ec2_key.pem
           chmod 600 /tmp/ec2_key.pem
           ssh -o StrictHostKeyChecking=no -i /tmp/ec2_key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            # Comprobar la distribución y usar el proceso de instalación de Docker adecuado
-            DISTRO=$(cat /etc/*release | grep -E 'Amazon Linux|Ubuntu|Debian' | head -n 1)
-
-            # Si es Amazon Linux 2 o Amazon Linux 2023
-            if [[ "$DISTRO" == *"Amazon Linux"* ]]; then
-              echo "Instalando Docker en Amazon Linux..."
-              sudo yum update -y
-              sudo yum install docker -y
+            # Detectar si el sistema es Amazon Linux 2023
+            DISTRO=$(cat /etc/*release | grep -E 'Amazon Linux 2023' | head -n 1)
+            
+            # Si es Amazon Linux 2023
+            if [[ "$DISTRO" == *"Amazon Linux 2023"* ]]; then
+              echo "Instalando Docker en Amazon Linux 2023..."
+              
+              # Actualizar paquetes y sistema
+              sudo dnf update -y
+              
+              # Instalar Docker
+              sudo dnf install docker -y
+              
+              # Iniciar y habilitar el servicio Docker
               sudo systemctl start docker
               sudo systemctl enable docker
+              
+              # Agregar el usuario 'ec2-user' al grupo 'docker' para usar Docker sin sudo
               sudo usermod -aG docker ec2-user
               newgrp docker
-            # Si es Ubuntu o Debian
-            elif [[ "$DISTRO" == *"Ubuntu"* || "$DISTRO" == *"Debian"* ]]; then
-              echo "Instalando Docker en Ubuntu/Debian..."
-              sudo apt-get update
-              sudo apt-get install docker.io -y
-              sudo systemctl start docker
-              sudo systemctl enable docker
-              sudo usermod -aG docker $(whoami)
-              newgrp docker
+              
+              # Detener y eliminar la aplicación anterior (si existe)
+              docker stop my-calculator-app || true
+              docker rm my-calculator-app || true
+              
+              # Cargar la nueva imagen
+              docker load < /tmp/my-calculator-app.tar.gz
+              
+              # Ejecutar la nueva imagen
+              docker run -d -p 80:80 --name my-calculator-app my-calculator-app
+            else
+              echo "El sistema no es Amazon Linux 2023."
+              exit 1
             fi
-
-            # Detener y eliminar la aplicación anterior (si existe)
-            docker stop my-calculator-app || true
-            docker rm my-calculator-app || true
-
-            # Cargar la nueva imagen
-            docker load < /tmp/my-calculator-app.tar.gz
-
-            # Ejecutar la nueva imagen
-            docker run -d -p 80:80 --name my-calculator-app my-calculator-app
           EOF
 
       # 6. Limpiar la clave SSH después de la transferencia y despliegue
