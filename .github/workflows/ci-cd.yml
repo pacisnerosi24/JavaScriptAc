@@ -66,14 +66,14 @@ jobs:
               newgrp docker
               
               # Detener y eliminar la aplicación anterior (si existe)
-              docker stop my-calculator-app || true
-              docker rm my-calculator-app || true
+              sudo docker stop my-calculator-app || true
+              sudo docker rm my-calculator-app || true
               
               # Cargar la nueva imagen
-              docker load < /tmp/my-calculator-app.tar.gz
+              sudo docker load < /tmp/my-calculator-app.tar.gz
               
               # Ejecutar la nueva imagen
-              docker run -d -p 80:80 --name my-calculator-app my-calculator-app
+              sudo docker run -d -p 80:80 --name my-calculator-app my-calculator-app
             else
               echo "El sistema no es Amazon Linux 2023."
               exit 1
